@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-# irpg bot v3.0 by jotun, jotun@idlerpg.net, et al. See http://idlerpg.net/
+# irpg bot v3.0.2 by jotun, jotun@idlerpg.net, et al. See http://idlerpg.net/
 #
 # Some code within this file was written by authors other than myself. As such,
 # distributing this code or distributing modified versions of this code is
@@ -164,7 +164,7 @@ my %opts = (
         reportregs => 1,
 );
 
-my $version = "3.0";
+my $version = "3.0.2";
 
 GetOptions(\%opts,
     "help|h",
@@ -190,11 +190,9 @@ GetOptions(\%opts,
     "dbfile|irpgdb|db|d=s",
 ) or die("Error: Could not parse command line. Try $0 --help\n");
 
-
 $opts{help} and do { help(); exit 0; };
 my $debug = $opts{debug} || 0;
 my $v = $opts{verbose} || $debug;
-
 
 my $outbytes = 0; # sent bytes
 my $primnick = $opts{botnick}; # for regain or register checks
@@ -231,6 +229,47 @@ my $freemessages = 4; # number of "free" privmsgs we can send. 0..$freemessages
 
 sub daemonize(); # prototype to avoid warnings
 sub backup(); # prototype to avoid warnings
+
+if (! -e $opts{dbfile}) {
+    $|=1;
+    %rps = ();
+    print "$opts{dbfile} does not appear to exist. I'm guessing this is your ".
+          "first time using IRPG. Please give an account name that you would ".
+          "like to have admin access: ";
+    chomp(my $uname = <STDIN>);
+    $uname =~ s/\s.*//g;
+    print "Enter a character class for this account: ";
+    chomp(my $uclass = <STDIN>);
+    $rps{$uname}{class} = substr($uclass,0,30);
+    print "Enter a password for this account: ";
+    system("stty -echo");
+    chomp(my $upass = <STDIN>);
+    system("stty echo");
+    $rps{$uname}{pass} = crypt($upass,mksalt());
+    $rps{$uname}{next} = $opts{rpbase};
+    $rps{$uname}{nick} = "";
+    $rps{$uname}{userhost} = "";
+    $rps{$uname}{level} = 0;
+    $rps{$uname}{online} = 0;
+    $rps{$uname}{idled} = 0;
+    $rps{$uname}{created} = time();
+    $rps{$uname}{lastlogin} = time();
+    $rps{$uname}{x} = int(rand(500));
+    $rps{$uname}{y} = int(rand(500));
+    $rps{$uname}{alignment}="n";
+    $rps{$uname}{isadmin} = 1;
+    for my $item ("ring","amulet","charm","weapon","helm",
+                  "tunic","pair of gloves","shield",
+                  "set of leggings","pair of boots") {
+        $rps{$uname}{item}{$item} = 0;
+    }
+    for my $pen ("pen_mesg","pen_nick","pen_part",
+                 "pen_kick","pen_quit","pen_quest",
+                 "pen_logout","pen_logout") {
+        $rps{$uname}{$pen} = 0;
+    }
+    writedb();
+}
 
 daemonize();
 
@@ -360,7 +399,7 @@ sub parse {
     }
     elsif ($arg[1] eq 'kick') {
         $usernick = $arg[3];
-        penalize($username,"kick");
+        penalize(finduser($usernick),"kick");
         delete($onchan{$usernick});
     }
     # don't penalize /notices to the bot
@@ -378,7 +417,7 @@ sub parse {
         # 315 is /WHO end. report who we automagically signed online iff it will
         # print < 2k of text
         if (keys(%auto_login)) {
-            if (length("%auto_login") < 2048) {
+            if (length("%auto_login") < 1024) {
                 chanmsg(scalar(keys(%auto_login))." users matching ".
                         scalar(keys(%prev_online))." hosts automatically ".
                         "logged in; accounts: ".join(", ",keys(%auto_login)));
@@ -1073,6 +1112,10 @@ sub rpcheck { # check levels, update database
     my $online = scalar(grep { $rps{$_}{online} } keys(%rps));
     # there's really nothing to do here if there are no online users
     return unless $online;
+    my $onlineevil = scalar(grep { $rps{$_}{online} &&
+                                   $rps{$_}{alignment} eq "e" } keys(%rps));
+    my $onlinegood = scalar(grep { $rps{$_}{online} &&
+                                   $rps{$_}{alignment} eq "g" } keys(%rps));
     if (!$opts{noscale}) {
         if (rand((20*86400)/$opts{self_clock}) < $online) { hog(); }
         if (rand((24*86400)/$opts{self_clock}) < $online) { team_battle(); }
@@ -1085,8 +1128,8 @@ sub rpcheck { # check levels, update database
         calamity() if rand(4000) < 1;
         godsend() if rand(2000) < 1;
     }
-    if (rand((8*86400)/$opts{self_clock}) < $online) { evilness(); }
-    if (rand((12*86400)/$opts{self_clock}) < $online) { goodness(); }
+    if (rand((8*86400)/$opts{self_clock}) < $onlineevil) { evilness(); }
+    if (rand((12*86400)/$opts{self_clock}) < $onlinegood) { goodness(); }
 
     moveplayers();
     
@@ -1148,16 +1191,17 @@ sub rpcheck { # check levels, update database
     # $opts{dbfile}, will not update $lasttime and so should have correct values
     # on next rpcheck(). 
     if ($lasttime != 1) {
+        my $curtime=time();
         for my $k (keys(%rps)) {
             if ($rps{$k}{online} && exists $rps{$k}{nick} &&
                 $rps{$k}{nick} && exists $onchan{$rps{$k}{nick}}) {
-                $rps{$k}{next} -= (time() - $lasttime);
-                $rps{$k}{idled} += (time() - $lasttime);
+                $rps{$k}{next} -= ($curtime - $lasttime);
+                $rps{$k}{idled} += ($curtime - $lasttime);
                 if ($rps{$k}{next} < 1) {
                     $rps{$k}{level}++;
                     if ($rps{$k}{level} > 60) {
                         $rps{$k}{next} = int(($opts{rpbase} *
-                                             ($opts{rpstep}**63)) +
+                                             ($opts{rpstep}**60)) +
                                              (86400*($rps{$k}{level} - 60)));
                     }
                     else {
@@ -1175,8 +1219,8 @@ sub rpcheck { # check levels, update database
             # artifact of a bad PEVAL
         }
         if (!$pausemode && $rpreport%60==0) { writedb(); }
-        $rpreport += (time() - $lasttime);
-        $lasttime = time();
+        $rpreport += ($curtime - $lasttime);
+        $lasttime = $curtime;
     }
 }
 

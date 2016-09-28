@@ -7,11 +7,35 @@ Thanks for your interest in the Idle RPG! Feel free to contact me with ideas and
 comments, or post them in the forum on the website for public view.
 
 --------------------------------------------------------------------------------
+  v3.0.2
+--------------------------------------------------------------------------------
+  - calls evilness() and goodness() should have been checking against the number
+    of online evil users and good users respectively, not the total number of
+    online users (SickMind)
+  - changed max length of auto-login text to 1k before bot will refuse to send
+  - fixed a problem with the bot penalizing the kicker instead of the kickee
+    when someone was kicked (Preston, anonymous, Soc @ idlerpg.net forum)
+  - the TTL at levels >60 was setting the TTL at level 63 + 1 day for each level
+    after 60 instead of TTL at level 60 + 1 day for each level after 60
+
+
+--------------------------------------------------------------------------------
+  v3.0.1
+--------------------------------------------------------------------------------
+  - forgot to add some sort of mechanism for setting up admins for new bots.
+    whoops. bot will now prompt for an owner's account details if it cannot find
+    $opts{dbfile} (Secret, anonymous @ idlerpg.net forum)
+  - fixed a typo in the ChangeLog ;)
+  - Vayanla noted that there was STILL a time discrepancy for very large games
+    (or very slow computers). many thanks to him for his help! this is now
+    fixed
+
+--------------------------------------------------------------------------------
   v3.0
 --------------------------------------------------------------------------------
   - fixed a bug causing RESTART not to work unless the bot's filename happened
     to be the same as its nickname
-  - item modifiers as well and time modifiers are now stored in the modifiers
+  - item modifiers as well as time modifiers are now stored in the modifiers
     file. changed name of tlog sub to clog (time -> character)
   - changed database write to every minute instead of every $opts{self_clock}.
     to lower the chance of lost stats, the bot calls writedb() if you request a
