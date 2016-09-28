@@ -1,0 +1,32 @@
+First-time users:
+
+1. Using your favorite text editor, open the bot's source. Read the file header.
+   If you don't agree with the license, please delete the source and remove
+   each of your brain cells associated with it. Kthx.
+2. Edit the bot's options to suit you.
+3. Run it with: perl bot.v3.0.pl
+4. If you have problems, try running it in debug mode: perl bot.v3.0.pl --debug
+   If you cannot diagnose the problem, post to http://idlerpg.net/forum.php
+5. Thanks for your interest in Idle RPG!
+
+
+IRPG 2.4x users looking to upgrade:
+
+1. Using your favorite text editor, open the bot's source. Read the file header.
+   If you don't agree with the license, please delete the source and remove
+   each of your brain cells associated with it. Kthx.
+2. Back up your old irpg.db: cp irpg.db irpg.db.orig
+3. Run the db conversion tool: perl irpgdbtool
+4. Answer the questions to suit you.
+5. Run it with: perl bot.v3.0.pl
+6. If you have problems, try running it in debug mode: perl bot.v3.0.pl --debug
+   If you cannot diagnose the problem, post to http://idlerpg.net/forum.php
+7. Thanks for your interest in Idle RPG!
+
+
+Pre-2.4x users looking to upgrade:
+
+1. Using your favorite text editor, open the bot's source. Read the file header.
+   If you don't agree with the license, please delete the source and remove
+   each of your brain cells associated with it. Kthx.
+2. I doubt the irpgdbtool will help you. Sorry. :/
