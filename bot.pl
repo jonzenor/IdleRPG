@@ -1,5 +1,5 @@
 #!/usr/local/bin/perl
-# irpg bot v3.0.2 by jotun, jotun@idlerpg.net, et al. See http://idlerpg.net/
+# irpg bot v3.1.1 by jotun, jotun@idlerpg.net, et al. See http://idlerpg.net/
 #
 # Some code within this file was written by authors other than myself. As such,
 # distributing this code or distributing modified versions of this code is
@@ -22,8 +22,8 @@
 #       user under which your bot runs, as they can use the PEVAL command to
 #       execute any command, or possibly even change your password. I sincerely
 #       suggest that you exercise extreme caution when giving someone admin
-#       access to your bot, or that you disable the PEVAL command (see
-#       $opts{disablepeval}).
+#       access to your bot, or that you disable the PEVAL command for non-owner
+#       accounts in your config file, .irpg.conf
 
 use strict;
 use warnings;
@@ -32,144 +32,18 @@ use IO::Select;
 use Data::Dumper;
 use Getopt::Long;
 
-my %opts = (
-    # local hostname or address to bind to. I suppose this is where you'd use
-    # a virtual host. leave blank if you don't want to use a vhost
-        localaddr => '',
-    # server name:port, enter as many as you like
-        servers => ['server1.irc-network.org:6667',
-                    'server2.irc-network.org:6667',
-                    'server3.irc-network.org:6667'],
-    # nickname
-        botnick => 'bot',
-    # username
-        botuser => 'bot',
-    # real name field
-        botrlnm => 'http://www.slashnet.org/~bot/',
-    # channel name [key]
-        botchan => '#idlerpg s3cr3t.p4ss',
-    # command to send upon successful connect
-        botident => 'PRIVMSG NickServ :identify ilovedink',
-    # modes to set self upon successful connect
-        botmodes => '+ix',
-    # command to send upon joining channel. %botnick% will evaluate to the bot's
-    # current nickname, so you don't have to worry about opping the wrong person
-        botopcmd => 'PRIVMSG ChanServ :op #idlerpg %botnick%',
-    # command sent to recover nick
-        botghostcmd => 'PRIVMSG NickServ :ghost bot ilovedink',
-    # URL to send users to for help
-        helpurl => 'http://idlerpg.net/',
-    # admin commands list (for admin help)
-        admincommurl => 'http://idlerpg.net/admincomms.txt',
-    # base time to level up
-        rpbase => 600,
-    # time to next level = rpbase * (rpstep ** CURRENT_LEVEL)
-        rpstep => 1.16,
-    # penalty time = penalty * (rppenstep ** CURRENT_LEVEL)
-        rppenstep => 1.14, 
-    # player database file
-        dbfile => 'irpg.db',
-    # where quests/godsends/calamities are stored
-        eventsfile => 'events.txt', 
-    # debug mode on/off flag, merely prints what text was received, what queue
-    # number outgoing text is given, and what text is sent to server (to the
-    # debug file, no longer to STDOUT)
-        debug => 0,
-    # choose filename to send debug output to. text is appended to this file
-    # while the bot is in debug mode, in lieu of STDOUT
-        debugfile => 'debug.txt',
-    # Use URL-type banning for non-logged-in users that have been on the channel
-    # less than 90 seconds?
-        doban => 1,
-    # URLs containing these terms will not be banned by the 'http:'
-    # advertisement ban (if you have it turned on)
-        okurl => [ "ultrazone.org", "idlerpg.net" ],
-    # modes of silence. in mode 0, bot sends all privmsgs. in mode 1, only
-    # chanmsg() is disabled. in mode 2, only privmsg() to non-channels is
-    # disabled. in mode 3, privmsgs to users and channels are disabled
-        silentmode => 0,
-    # write quest info file? ALL this file does is give outside programs info
-    # about the active quests, its participants, their positions, and time to
-    # completion
-        writequestfile => 1,
-    # filename for the above-mentioned file
-        questfilename => 'questinfo.txt',
-    # voice users on login (and register)? if you like, you can set your channel
-    # +m, then +v clients as they login, cutting down on spam. however, if your
-    # users generally bring in a second client to chat with, that client won't
-    # be able to speak in the channel
-        voiceonlogin => 0,
-    # disallow usernames and character classes with control codes (bold, color,
-    # underline, bell, etc)?
-        noccodes => 1,
-    # disallow usernames and character classes that contain "non-printable"
-    # characters? it's a good idea to leave this option on, as I have had
-    # problems in the past with using binary hash keys
-        nononp => 1,
-    # URL where users can reach the online quest map, if available. if not
-    # offering a map to users, leave this blank
-        mapurl => 'http://idlerpg.net/quest.php',
-    # allow a STATUS command for users? this is a p0 command to view information
-    # on an irpg user. useful if you don't have a website where users can view
-    # their stats
-        statuscmd => 0,
-    # filename to write our PID to. leave blank if pidfile is unnecessary to you
-        pidfile => '.irpg.pid',
-    # attempt to reconnect if disconnected?
-        reconnect => 1,
-    # seconds to wait before attempting to reconnect. don't hammer your irc
-    # network, please; 90+ seconds is suggested
-        reconnect_wait => 120,
-    # this is what the bot considers to be an "internal clock" of sorts. some
-    # examples of where this is used: $freemessages lines of text from the
-    # message queue are sent every SELF_CLOCK seconds; every SELF_CLOCK seconds,
-    # the players move on the map (SELF_CLOCK times to simulate movement every
-    # second); HOGs, calamities, godsends, etc. are given a chance to occur
-    # every SELF_CLOCK seconds; and the list goes on. if you have problems with
-    # the bot flooding off, try increasing this number to 4 or 5. if your bot
-    # appears to 'lag' because it is queueing too much text, you can set this
-    # as low as 1. this must be an integral value (no fractions). it must be a
-    # factor of 60 (or certain events will not occur, like database rewrites)
-        self_clock => 3,
-    # file into which character modifier texts are appended
-        modsfile => 'modifiers.txt',
-    # disallow the registration of usernames already existing in a different
-    # case? ie, jon == Jon == JON
-        casematters => 1,
-    # allow rudimentary netsplit detection, and a) give no penalty and b) log
-    # them back in upon return? I always suggest to users that they switch to
-    # the server that the bot is on, but this has been a frequent request, so.
-    # will pick up quit messages that match /^\S+\.\S+ \S+\.\S+$/. if your
-    # network does not prefix quit messages with "Quit: " (or something other
-    # string), then users can cheat this at their whim
-        detectsplits => 1,
-    # time to wait for netsplit users to return? in seconds
-        splitwait => 900, # 900 = 15 minutes, good for large nets
-    # disable the PEVAL command for admins? this command allows the execution of
-    # arbitrary Perl code by bot admins, effectively giving them complete
-    # control of the account under which the bot runs. I prefer to leave this
-    # command available and choose my admins with care, but, whatever :^)
-        disablepeval => 0,
-    # allow non-admin users some information on the bot, such as the server it
-    # is connected to and the nicknames of online admins via a p0 INFO command?
-        allowuserinfo => 1,
-    # ignore the new scaling features and use the old method for calculating the
-    # odds of events occurring? if you have a very large game and were
-    # comfortable with the speed that HoGs, Godsends, Calamities, etc. were
-    # occurring, you may want to set this
-        noscale => 0,
-    # allow bot to access http://jotun.ultrazone.org/g7/count.php?new=1 each
-    # time someone registers a new username? it only takes a second, and I'd
-    # really like to be able to keep up with the total player count :^)
-        reportregs => 1,
-);
+my %opts;
 
-my $version = "3.0.2";
+readconfig();
 
+my $version = "3.1.1";
+
+# command line overrides .irpg.conf
 GetOptions(\%opts,
     "help|h",
     "verbose|v",
     "debug",
+    "debugfile=s",
     "server|s=s",
     "botnick|n=s",
     "botuser|u=s",
@@ -178,21 +52,51 @@ GetOptions(\%opts,
     "botident|p=s",
     "botmodes|m=s",
     "botopcmd|o=s",
+    "localaddr=s",
     "botghostcmd|g=s",
     "helpurl=s",
     "admincommurl=s",
     "doban",
+    "silentmode=i",
+    "writequestfile",
+    "questfilename=s",
+    "voiceonlogin",
+    "noccodes",
+    "nononp",
+    "mapurl=s",
+    "statuscmd",
+    "pidfile=s",
+    "reconnect",
+    "reconnect_wait=i",
+    "self_clock=i",
+    "modsfile=s",
+    "casematters",
+    "detectsplits",
+    "splitwait=i",
+    "allowuserinfo",
+    "noscale",
+    "phonehome",
+    "owner=s",
+    "owneraddonly",
+    "ownerdelonly",
+    "ownerpevalonly",
+    "checkupdates",
+    "senduserlist",
+    "limitpen=i",
+    "mapx=i",
+    "mapy=i",
+    "modesperline=i",
     "okurl|k=s@",
     "eventsfile=s",
     "rpstep=f",
     "rpbase=i",
     "rppenstep=f",
     "dbfile|irpgdb|db|d=s",
-) or die("Error: Could not parse command line. Try $0 --help\n");
+) or debug("Error: Could not parse command line. Try $0 --help\n",1);
 
 $opts{help} and do { help(); exit 0; };
-my $debug = $opts{debug} || 0;
-my $v = $opts{verbose} || $debug;
+
+debug("Config: read $_: ".Dumper($opts{$_})) for keys(%opts);
 
 my $outbytes = 0; # sent bytes
 my $primnick = $opts{botnick}; # for regain or register checks
@@ -228,23 +132,27 @@ my %split; # holds nick!user@hosts for clients that have been netsplit
 my $freemessages = 4; # number of "free" privmsgs we can send. 0..$freemessages
 
 sub daemonize(); # prototype to avoid warnings
-sub backup(); # prototype to avoid warnings
 
 if (! -e $opts{dbfile}) {
     $|=1;
     %rps = ();
     print "$opts{dbfile} does not appear to exist. I'm guessing this is your ".
           "first time using IRPG. Please give an account name that you would ".
-          "like to have admin access: ";
+          "like to have admin access [$opts{owner}]: ";
     chomp(my $uname = <STDIN>);
     $uname =~ s/\s.*//g;
+    $uname = length($uname)?$uname:$opts{owner};
     print "Enter a character class for this account: ";
     chomp(my $uclass = <STDIN>);
     $rps{$uname}{class} = substr($uclass,0,30);
     print "Enter a password for this account: ";
-    system("stty -echo");
+    if ($^O ne "MSWin32") {
+        system("stty -echo");
+    }
     chomp(my $upass = <STDIN>);
-    system("stty echo");
+    if ($^O ne "MSWin32") {
+        system("stty echo");
+    }
     $rps{$uname}{pass} = crypt($upass,mksalt());
     $rps{$uname}{next} = $opts{rpbase};
     $rps{$uname}{nick} = "";
@@ -254,8 +162,8 @@ if (! -e $opts{dbfile}) {
     $rps{$uname}{idled} = 0;
     $rps{$uname}{created} = time();
     $rps{$uname}{lastlogin} = time();
-    $rps{$uname}{x} = int(rand(500));
-    $rps{$uname}{y} = int(rand(500));
+    $rps{$uname}{x} = int(rand($opts{mapx}));
+    $rps{$uname}{y} = int(rand($opts{mapy}));
     $rps{$uname}{alignment}="n";
     $rps{$uname}{isadmin} = 1;
     for my $item ("ring","amulet","charm","weapon","helm",
@@ -269,11 +177,47 @@ if (! -e $opts{dbfile}) {
         $rps{$uname}{$pen} = 0;
     }
     writedb();
+    print "OK, wrote you into $opts{dbfile}.\n";
 }
 
+# this is almost silly...
+if ($opts{checkupdates}) {
+    print "Checking for updates...\n\n";
+    my $tempsock = IO::Socket::INET->new(PeerAddr=>"jotun.ultrazone.org:80",
+                                         Timeout => 15);
+    if ($tempsock) {
+        print $tempsock "GET /g7/version.php?version=$version HTTP/1.1\r\n".
+                        "Host: jotun.ultrazone.org:80\r\n\r\n";
+        my($line,$newversion);
+        while ($line=<$tempsock>) {
+            chomp($line);
+            next() unless $line;
+            if ($line =~ /^Current version : (\S+)/) {
+                if ($version ne $1) {
+                    print "There is an update available! Changes include:\n";
+                    $newversion=1;
+                }
+                else {
+                    print "You are running the latest version (v$1).\n";
+                    close($tempsock);
+                    last();
+                }
+            }
+            elsif ($newversion && $line =~ /^(  -? .+)/) { print "$1\n"; }
+            elsif ($newversion && $line =~ /^URL: (.+)/) {
+                print "\nGet the newest version from $1!\n";
+                close($tempsock);
+                last();
+            }
+        }
+    }
+    else { print debug("Could not connect to update server.")."\n"; }
+}
+
+print "\n".debug("Becoming a daemon...")."\n";
 daemonize();
 
-$SIG{HUP} = sub { 1; }; # ignore sighup
+$SIG{HUP} = "readconfig"; # sighup = reread config file
 
 CONNECT: # cheese.
 
@@ -294,7 +238,9 @@ while (!$sock && $conn_tries < 2*@{$opts{servers}}) {
     else { debug("Connected."); }
 }
 
-die("Error: Too many connection failures, exhausted server list.") unless $sock;
+if (!$sock) {
+    debug("Error: Too many connection failures, exhausted server list.\n",1);
+}
 
 $conn_tries=0;
 
@@ -318,8 +264,16 @@ while (1) {
             }
         }
         else {
+            # uh oh, we've been disconnected from the server, possibly before
+            # we've logged in the users in %auto_login. so, we'll set those
+            # users' online flags to 1, rewrite db, and attempt to reconnect
+            # (if that's wanted of us)
+            $rps{$_}{online}=1 for keys(%auto_login);
+            writedb();
+
             close($fh);
             $sel->remove($fh);
+
             if ($opts{reconnect}) {
                 undef(@queue);
                 undef($sock);
@@ -329,7 +283,7 @@ while (1) {
                 sleep($opts{reconnect_wait});
                 goto CONNECT;
             }
-            else { die(debug("Socket closed; disconnected.")); }
+            else { debug("Socket closed; disconnected.",1); }
         }
     }
     else { select(undef,undef,undef,1); }
@@ -347,6 +301,15 @@ sub parse {
     # logged in char name of nickname, or undef if nickname is not online
     my $username = finduser($usernick);
     if (lc($arg[0]) eq 'ping') { sts("PONG $arg[1]",1); }
+    elsif (lc($arg[0]) eq 'error') {
+        # uh oh, we've been disconnected from the server, possibly before we've
+        # logged in the users in %auto_login. so, we'll set those users' online
+        # flags to 1, rewrite db, and attempt to reconnect (if that's wanted of
+        # us)
+        $rps{$_}{online}=1 for keys(%auto_login);
+        writedb();
+        return;
+    }
     $arg[1] = lc($arg[1]); # original case no longer matters
     if ($arg[1] eq '433' && $opts{botnick} eq $arg[3]) {
         $opts{botnick} .= 0;
@@ -362,7 +325,7 @@ sub parse {
             sts("WHO $opts{botchan}");
             (my $opcmd = $opts{botopcmd}) =~ s/%botnick%/$opts{botnick}/eg;
             sts($opcmd);
-            $lasttime = time();
+            $lasttime = time(); # start rpcheck()
         }
     }
     elsif ($arg[1] eq 'quit') {
@@ -415,9 +378,10 @@ sub parse {
     }
     elsif ($arg[1] eq '315') {
         # 315 is /WHO end. report who we automagically signed online iff it will
-        # print < 2k of text
+        # print < 1k of text
         if (keys(%auto_login)) {
-            if (length("%auto_login") < 1024) {
+            # not a true measure of size, but easy
+            if (length("%auto_login") < 1024 && $opts{senduserlist}) {
                 chanmsg(scalar(keys(%auto_login))." users matching ".
                         scalar(keys(%prev_online))." hosts automatically ".
                         "logged in; accounts: ".join(", ",keys(%auto_login)));
@@ -427,16 +391,28 @@ sub parse {
                         scalar(keys(%prev_online))." hosts automatically ".
                         "logged in.");
             }
+            if ($opts{voiceonlogin}) {
+                my @vnicks = map { $rps{$_}{nick} } keys(%auto_login);
+                while (@vnicks) {
+                    sts("MODE $opts{botchan} +".
+                        ('v' x $opts{modesperline})." ".
+                        join(" ",@vnicks[0..$opts{modesperline}-1]));
+                    splice(@vnicks,0,$opts{modesperline});
+                }
+            }
         }
         else { chanmsg("0 users qualified for auto login."); }
         undef(%prev_online);
         undef(%auto_login);
     }
+    elsif ($arg[1] eq '005') {
+        if ("@arg" =~ /MODES=(\d+)/) { $opts{modesperline}=$1; }
+    }
     elsif ($arg[1] eq '352') {
         my $user;
-        # 352 is one line of /WHO. check that the nick!user@host is equal to the
-        # old nick!user@host of the user, AND that charname!nick!user@host
-        # exists in @prev_online, the list generated in loaddb()
+        # 352 is one line of /WHO. check that the nick!user@host exists as a key
+        # in %prev_online, the list generated in loaddb(). the value is the user
+        # to login
         $onchan{$arg[7]}=time();
         if (exists($prev_online{$arg[7]."!".$arg[4]."\@".$arg[5]})) {
             $rps{$prev_online{$arg[7]."!".$arg[4]."\@".$arg[5]}}{online} = 1;
@@ -451,8 +427,9 @@ sub parse {
                 notice("\1VERSION IRPG bot v$version by jotun; ".
                        "http://idlerpg.net/\1",$usernick);
             }
-            elsif ($arg[3] eq "peval" && !$opts{disablepeval}) {
-                if (!ha($username)) {
+            elsif ($arg[3] eq "peval") {
+                if (!ha($username) || ($opts{ownerpevalonly} &&
+                    $opts{owner} ne $username)) {
                     privmsg("You don't have access to PEVAL.", $usernick);
                 }
                 else {
@@ -543,8 +520,8 @@ sub parse {
                         $rps{$arg[4]}{created} = time();
                         $rps{$arg[4]}{lastlogin} = time();
                         $rps{$arg[4]}{pass} = crypt($arg[5],mksalt());
-                        $rps{$arg[4]}{x} = int(rand(500));
-                        $rps{$arg[4]}{y} = int(rand(500));
+                        $rps{$arg[4]}{x} = int(rand($opts{mapx}));
+                        $rps{$arg[4]}{y} = int(rand($opts{mapy}));
                         $rps{$arg[4]}{alignment}="n";
                         $rps{$arg[4]}{isadmin} = 0;
                         for my $item ("ring","amulet","charm","weapon","helm",
@@ -567,7 +544,7 @@ sub parse {
                                 "can idle the longest. As such, talking in ".
                                 "the channel, parting, quitting, and changing ".
                                 "nicks all penalize you.",$usernick);
-                        if ($opts{reportregs}) {
+                        if ($opts{phonehome}) {
                             my $tempsock = IO::Socket::INET->new(PeerAddr=>
                                 "jotun.ultrazone.org:80");
                             if ($tempsock) {
@@ -614,7 +591,8 @@ sub parse {
                 }
             }
             elsif ($arg[3] eq "mkadmin") {
-                if (!ha($username)) {
+                if (!ha($username) || ($opts{owneraddonly} &&
+                    $opts{owner} ne $username)) {
                     privmsg("You don't have access to MKADMIN.", $usernick);
                 }
                 elsif (!defined($arg[4])) {
@@ -625,7 +603,27 @@ sub parse {
                 }
                 else {
                     $rps{$arg[4]}{isadmin}=1;
-                    privmsg("Account $arg[4] is now a bot admin.",$usernick);
+                    privmsg("Account $arg[4] is now a bot admin.",$usernick, 1);
+                }
+            }
+            elsif ($arg[3] eq "deladmin") {
+                if (!ha($username) || ($opts{ownerdelonly} &&
+                    $opts{owner} ne $username)) {
+                    privmsg("You don't have access to DELADMIN.", $usernick);
+                }
+                elsif (!defined($arg[4])) {
+                    privmsg("Try: DELADMIN <char name>", $usernick, 1);
+                }
+                elsif (!exists($rps{$arg[4]})) {
+                    privmsg("No such account $arg[4].", $usernick, 1);
+                }
+                elsif ($arg[4] eq $opts{owner}) {
+                    privmsg("Cannot DELADMIN owner account.", $usernick, 1);
+                }
+                else {
+                    $rps{$arg[4]}{isadmin}=0;
+                    privmsg("Account $arg[4] is no longer a bot admin.",
+                            $usernick, 1);
                 }
             }
             elsif ($arg[3] eq "hog") {
@@ -635,6 +633,16 @@ sub parse {
                 else {
                     chanmsg("$usernick has summoned the Hand of God.");
                     hog();
+                }
+            }
+            elsif ($arg[3] eq "rehash") {
+                if (!ha($username)) {
+                    privmsg("You don't have access to REHASH.", $usernick);
+                }
+                else {
+                    readconfig();
+                    privmsg("Reread config file.",$usernick,1);
+                    $opts{botchan} =~ s/ .*//; # strip channel key if present
                 }
             }
             elsif ($arg[3] eq "chpass") {
@@ -841,10 +849,10 @@ sub parse {
                 }
             }
             elsif ($arg[3] eq "reloaddb") {
-                if ($arg[1] ne "notice" && !ha($username)) {
+                if (!ha($username)) {
                     privmsg("You do not have access to RELOADDB.", $usernick);
                 }
-                elsif ($arg[1] ne "notice" && !$pausemode) {
+                elsif (!$pausemode) {
                     privmsg("ERROR: Can only use LOADDB while in PAUSE mode.",
                             $usernick, 1);
                 }
@@ -928,7 +936,7 @@ sub parse {
                     $info = "IRPG bot v$version by jotun, ".
                             "http://idlerpg.net/. On via server: ".
                             $opts{servers}->[0].". Admins online: ".
-                            join(", ",map { $rps{$_}{nick} }
+                            join(", ", map { $rps{$_}{nick} }
                                       grep { $rps{$_}{isadmin} &&
                                              $rps{$_}{online} } keys(%rps)).".";
                     privmsg($info, $usernick);
@@ -1049,14 +1057,24 @@ sub fq { # deliver message(s) from queue
         ++$freemessages if $freemessages < 4;
         return undef;
     }
+    my $sentbytes = 0;
     for (0..$freemessages) {
         last() if !@queue; # no messages left to send
         # lower number of "free" messages we have left
         my $line=shift(@queue);
+        # if we have already sent one message, and the next message to be sent
+        # plus the previous messages we have sent this call to fq() > 768 bytes,
+        # then requeue this message and return. we don't want to flood off,
+        # after all
+        if ($_ != 0 && (length($line)+$sentbytes) > 768) {
+            unshift(@queue,$line);
+            last();
+        }
         if ($sock) {
             debug("(fm$freemessages) -> $line");
             --$freemessages if $freemessages > 0;
             print $sock "$line\r\n";
+            $sentbytes += length($line) + 2;
         }
         else {
             undef(@queue);
@@ -1150,7 +1168,6 @@ sub rpcheck { # check levels, update database
             $quest{qtime} = time() + 21600;
         }
         # quest type 2 awards are handled in moveplayers()
-        writequestfile();
     }
     if ($rpreport && $rpreport%36000==0) { # 10 hours
         my @u = sort { $rps{$b}{level} <=> $rps{$a}{level} ||
@@ -1219,7 +1236,7 @@ sub rpcheck { # check levels, update database
             # artifact of a bad PEVAL
         }
         if (!$pausemode && $rpreport%60==0) { writedb(); }
-        $rpreport += ($curtime - $lasttime);
+        $rpreport += $opts{self_clock};
         $lasttime = $curtime;
     }
 }
@@ -1295,18 +1312,22 @@ sub team_battle { # pit three players against three other players
         $gain = $rps{$opp[$p]}{next} if $gain > $rps{$opp[$p]}{next};
     }
     $gain = int($gain*.20);
-    if (rand($mysum) >= rand($oppsum)) {
-        chanmsg(clog("$opp[0], $opp[1], and $opp[2] have team battled ".
-                     "$opp[3], $opp[4], and $opp[5] and won! ".duration($gain).
-                     " is removed from their clocks."));
+    my $myroll = int(rand($mysum));
+    my $opproll = int(rand($oppsum));
+    if ($myroll >= $opproll) {
+        chanmsg(clog("$opp[0], $opp[1], and $opp[2] [$myroll/$mysum] have ".
+                     "team battled $opp[3], $opp[4], and $opp[5] [$opproll/".
+                     "$oppsum] and won! ".duration($gain)." is removed from ".
+                     "their clocks."));
         $rps{$opp[0]}{next} -= $gain;
         $rps{$opp[1]}{next} -= $gain;
         $rps{$opp[2]}{next} -= $gain;
     }
     else {
-        chanmsg(clog("$opp[0], $opp[1], and $opp[2] have team battled ".
-                     "$opp[3], $opp[4], and $opp[5] and lost! ".duration($gain).
-                     " is added to their clocks."));
+        chanmsg(clog("$opp[0], $opp[1], and $opp[2] [$myroll/$mysum] have ".
+                     "team battled $opp[3], $opp[4], and $opp[5] [$opproll/".
+                     "$oppsum] and lost! ".duration($gain)." is added to ".
+                     "their clocks."));
         $rps{$opp[0]}{next} += $gain;
         $rps{$opp[1]}{next} += $gain;
         $rps{$opp[2]}{next} += $gain;
@@ -1429,6 +1450,7 @@ sub find_item { # find item for argument player
 }
 
 sub loaddb { # load the players database
+    backup();
     my $l;
     %rps = ();
     if (!open(RPS,$opts{dbfile}) && -e $opts{dbfile}) {
@@ -1442,8 +1464,8 @@ sub loaddb { # load the players database
         if (@i != 32) {
             sts("QUIT: Anomaly in loaddb(); line $. of $opts{dbfile} has ".
                 "wrong fields (".scalar(@i).")");
-            die("Anomaly in loaddb(); line $. of $opts{dbfile} has wrong ".
-                "fields (".scalar(@i).")");
+            debug("Anomaly in loaddb(); line $. of $opts{dbfile} has wrong ".
+                "fields (".scalar(@i).")",1);
         }
         if (!$sock) { # if not RELOADDB
             if ($i[8]) { $prev_online{$i[7]}=$i[0]; } # log back in
@@ -1481,8 +1503,8 @@ sub loaddb { # load the players database
         $rps{$i[0]}{alignment}) = (@i[1..7],($sock?$i[8]:0),@i[9..$#i]);
     }
     close(RPS);
-    debug(sprintf("loaddb(): loaded %d accounts, %d previously online.",
-                  scalar(keys(%rps)),scalar(keys(%prev_online))));
+    debug("loaddb(): loaded ".scalar(keys(%rps))." accounts, ".
+          scalar(keys(%prev_online))." previously online.");
 }
 
 sub moveplayers {
@@ -1537,10 +1559,10 @@ sub moveplayers {
                     $rps{$player}{x} += int(rand(3))-1;
                     $rps{$player}{y} += int(rand(3))-1;
                     # if player goes over edge, wrap them back around
-                    if ($rps{$player}{x} > 500) { $rps{$player}{x} = 0; }
-                    if ($rps{$player}{y} > 500) { $rps{$player}{y} = 0; }
-                    if ($rps{$player}{x} < 0) { $rps{$player}{x} = 500; }
-                    if ($rps{$player}{y} < 0) { $rps{$player}{y} = 500; }
+                    if ($rps{$player}{x} > $opts{mapx}) { $rps{$player}{x}=0; }
+                    if ($rps{$player}{y} > $opts{mapy}) { $rps{$player}{y}=0; }
+                    if ($rps{$player}{x} < 0) { $rps{$player}{x}=$opts{mapx}; }
+                    if ($rps{$player}{y} < 0) { $rps{$player}{y}=$opts{mapy}; }
                     
                     if (exists($positions{$rps{$player}{x}}{$rps{$player}{y}}) &&
                         !$positions{$rps{$player}{x}}{$rps{$player}{y}}{battled}) {
@@ -1595,10 +1617,10 @@ sub moveplayers {
                 $rps{$player}{x} += int(rand(3))-1;
                 $rps{$player}{y} += int(rand(3))-1;
                 # if player goes over edge, wrap them back around
-                if ($rps{$player}{x} > 500) { $rps{$player}{x} = 0; }
-                if ($rps{$player}{y} > 500) { $rps{$player}{y} = 0; }
-                if ($rps{$player}{x} < 0) { $rps{$player}{x} = 500; }
-                if ($rps{$player}{y} < 0) { $rps{$player}{y} = 500; }
+                if ($rps{$player}{x} > $opts{mapx}) { $rps{$player}{x} = 0; }
+                if ($rps{$player}{y} > $opts{mapy}) { $rps{$player}{y} = 0; }
+                if ($rps{$player}{x} < 0) { $rps{$player}{x} = $opts{mapx}; }
+                if ($rps{$player}{y} < 0) { $rps{$player}{y} = $opts{mapy}; }
                 if (exists($positions{$rps{$player}{x}}{$rps{$player}{y}}) &&
                     !$positions{$rps{$player}{x}}{$rps{$player}{y}}{battled}) {
                     if ($rps{$positions{$rps{$player}{x}}{$rps{$player}{y}}{user}}{isadmin} &&
@@ -1716,18 +1738,21 @@ sub itemsum {
 }
 
 sub daemonize() {
-    # win32 doesn't daemonize (this way)
-    if ($^O eq "MSWin32") { return; }
+    # win32 doesn't daemonize (this way?)
+    if ($^O eq "MSWin32") {
+        print debug("Nevermind, this is Win32, no I'm not.")."\n";
+        return;
+    }
     use POSIX 'setsid';
     $SIG{CHLD} = sub { };
     fork() && exit(0); # kill parent
-    POSIX::setsid() || die("POSIX::setsid() failed: $!");
+    POSIX::setsid() || debug("POSIX::setsid() failed: $!",1);
     $SIG{CHLD} = sub { };
     fork() && exit(0); # kill the parent as the process group leader
     $SIG{CHLD} = sub { };
-    open(STDIN,'/dev/null') || die("Cannot read /dev/null: $!");
-    open(STDOUT,'>/dev/null') || die("Cannot write to /dev/null: $!");
-    open(STDERR,'>/dev/null') || die("Cannot write to /dev/null: $!");
+    open(STDIN,'/dev/null') || debug("Cannot read /dev/null: $!",1);
+    open(STDOUT,'>/dev/null') || debug("Cannot write to /dev/null: $!",1);
+    open(STDERR,'>/dev/null') || debug("Cannot write to /dev/null: $!",1);
     # write our PID to $opts{pidfile}, or return semi-silently on failure
     open(PIDFILE,">$opts{pidfile}") || do {
         debug("Error: failed opening pid file: $!");
@@ -1832,7 +1857,7 @@ sub godsend { # bless the unworthy
         }
         my $suffix="";
         if ($rps{$player}{item}{$type} =~ /(\D)$/) { $suffix=$1; }
-        $rps{$player}{item}{$type} = int(int($rps{$player}{item}{$type}) * .9);
+        $rps{$player}{item}{$type} = int(int($rps{$player}{item}{$type}) * 1.1);
         $rps{$player}{item}{$type}.=$suffix;
     }
     else {
@@ -1900,6 +1925,7 @@ sub quest {
                 ($opts{mapurl}?" See $opts{mapurl} to monitor their journey's ".
                 "progress.":""));
     }
+    writequestfile();
 }
 
 sub questpencheck {
@@ -1952,14 +1978,21 @@ sub penalize {
     return 0 if !exists($rps{$username});
     my $type = shift;
     my $pen = 0;
+    questpencheck($username);
     if ($type eq "quit") {
         $pen = int(20 * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_quit}+=$pen;
         $rps{$username}{online}=0;
     }
     elsif ($type eq "nick") {
         my $newnick = shift;
         $pen = int(30 * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_nick}+=$pen;
         $rps{$username}{nick} = substr($newnick,1);
         substr($rps{$username}{userhost},0,length($rps{$username}{nick})) =
@@ -1969,12 +2002,18 @@ sub penalize {
     }
     elsif ($type eq "privmsg" || $type eq "notice") {
         $pen = int(shift(@_) * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_mesg}+=$pen;
         notice("Penalty of ".duration($pen)." added to your timer for ".
                $type.".",$rps{$username}{nick});
     }
     elsif ($type eq "part") {
         $pen = int(200 * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_part}+=$pen;
         notice("Penalty of ".duration($pen)." added to your timer for ".
                "parting.",$rps{$username}{nick});
@@ -1982,6 +2021,9 @@ sub penalize {
     }
     elsif ($type eq "kick") {
         $pen = int(250 * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_kick}+=$pen;
         notice("Penalty of ".duration($pen)." added to your timer for ".
                "being kicked.",$rps{$username}{nick});
@@ -1989,25 +2031,30 @@ sub penalize {
     }
     elsif ($type eq "logout") {
         $pen = int(20 * ($opts{rppenstep}**$rps{$username}{level}));
+        if ($opts{limitpen} && $pen > $opts{limitpen}) {
+            $pen = $opts{limitpen};
+        }
         $rps{$username}{pen_logout} += $pen;
         notice("Penalty of ".duration($pen)." added to your timer for ".
                "LOGOUT command.",$rps{$username}{nick});
         $rps{$username}{online}=0;
     }
     $rps{$username}{next} += $pen;
-    questpencheck($username);
     return 1; # successfully penalized a user! woohoo!
 }
 
 sub debug {
     (my $text = shift) =~ s/[\r\n]//g;
-    if (!$opts{debug} && !$opts{verbose}) { return; }
-    open(DBG,">>$opts{debugfile}") or do {
-        chanmsg("Error: Cannot open debug file: $!");
-        return;
-    };
-    print DBG ts()."$text\n";
-    close(DBG);
+    my $die = shift;
+    if ($opts{debug} || $opts{verbose}) {
+        open(DBG,">>$opts{debugfile}") or do {
+            chanmsg("Error: Cannot open debug file: $!");
+            return;
+        };
+        print DBG ts()."$text\n";
+        close(DBG);
+    }
+    if ($die) { die("$text\n"); }
     return $text;
 }
 
@@ -2271,4 +2318,35 @@ sub writedb {
         }
     }
     close(RPS);
+}
+
+sub readconfig {
+    if (! -e ".irpg.conf") {
+        debug("Error: Cannot find .irpg.conf. Copy it to this directory, ".
+              "please.",1);
+    }
+    else {
+        open(CONF,"<.irpg.conf") or do {
+            debug("Failed to open config file .irpg.conf: $!",1);
+        };
+        my($line,$key,$val);
+        while ($line=<CONF>) {
+            next() if $line =~ /^#/; # skip comments
+            $line =~ s/[\r\n]//g;
+            $line =~ s/^\s+//g;
+            next() if !length($line); # skip blank lines
+            ($key,$val) = split(/\s+/,$line,2);
+            $key = lc($key);
+            if (lc($val) eq "on" || lc($val) eq "yes") { $val = 1; }
+            elsif (lc($val) eq "off" || lc($val) eq "no") { $val = 0; }
+            if ($key eq "die") {
+                die("Please edit the file .irpg.conf to setup your bot's ".
+                    "options. Also, read the README file if you haven't ".
+                    "yet.\n");
+            }
+            elsif ($key eq "server") { push(@{$opts{servers}},$val); }
+            elsif ($key eq "okurl") { push(@{$opts{okurl}},$val); }
+            else { $opts{$key} = $val; }
+        }
+    }
 }

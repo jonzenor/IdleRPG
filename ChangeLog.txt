@@ -7,7 +7,66 @@ Thanks for your interest in the Idle RPG! Feel free to contact me with ideas and
 comments, or post them in the forum on the website for public view.
 
 --------------------------------------------------------------------------------
-  v3.0.2
+  v3.1.1: released 6/3/04
+--------------------------------------------------------------------------------
+  - fixed 2 typos having to deal with die() messages when reading the config
+    file (meij, et al)
+  - quest() now calls writequestfile() when it completes so that it is
+    immediately available
+  - loaddb() now calls backup() before it starts so you always have an
+    up-to-date backup if your bot mangles your db
+  - readconfig() now strips out \r and \n (meij, kylemson, et al)
+
+
+--------------------------------------------------------------------------------
+  v3.1.0: released 6/2/04
+--------------------------------------------------------------------------------
+  - added a config file so you don't have to re-setup configuration options
+    everytime you upgrade. added a function readconfig() to read this file or
+    die() if it cannot be found
+  - SIGHUP will now call readconfig()
+  - added a DELADMIN command to remove admin status from a username. format:
+        /msg bot DELADMIN <account>
+    owner account cannot be DELADMINed. DELADMIN may be limited to owner account
+    depending on configuration (TGS)
+  - added an 'owner' account option. owner cannot be DELADMINed, among other
+    things
+  - added an 'owneraddonly' option. if set, only owner account can MKADMIN
+  - added an 'ownerdelonly' option. if set, only owner account can DELADMIN
+  - renamed disablepeval to ownerpevalonly. if set, only owner account can PEVAL
+  - added missing command line options for %opts options
+  - fq() will limit itself to either 1 message or <= 768 bytes output per call,
+    regardless of $freemessages
+  - added an option to turn off the sending of the list of users automatically
+    logged back in on a bot restart, even if the list < 1 k
+  - added an option to limit the penalty a single event can incur, 'limitpen'.
+    set to 0 to disable the feature, otherwise is taken to be an integral number
+    of seconds
+  - Win32 no longer tries to turn terminal echo on/off via "stty"
+  - tarball now unpacks files to their own directory instead of .
+  - removed unused $v, $debug variables
+  - auto-login would not voice users that it logged in even if voiceonlogin was
+    set, fixed (wogi, et al)
+  - fixed a comment having to do with auto login
+  - $rpreport should not have been adjusted by $curtime, but by
+    $opts{self_clock} to keep it reliable. this may have caused some loss of
+    data as the bot neglected to properly backup its database. so sorry! should
+    now be fixed (many)
+  - item godsend was removing 10% of item's value instead of adding it. another
+    copy/paste error. sorry! (Jim Dew)
+  - fixed a bug that resulted in users that caused quests to fail not being
+    penalized, as they were set as 'offline' before the bot had a chance to
+    penalize them (Jim Dew)
+  - added options to define the size of your IRPG grid, 'mapx' and 'mapy' (Rick)
+  - team battle now shows roll/sum like other battles (anonymous @ forum)
+  - added REHASH command to call readconfig()
+  - added an option to define the number of modes per line to use when voicing
+    users after an auto login. this variable may be overriden by the server's
+    directive (Rick)
+
+
+--------------------------------------------------------------------------------
+  v3.0.2: released 5/30/04
 --------------------------------------------------------------------------------
   - calls evilness() and goodness() should have been checking against the number
     of online evil users and good users respectively, not the total number of
@@ -15,12 +74,10 @@ comments, or post them in the forum on the website for public view.
   - changed max length of auto-login text to 1k before bot will refuse to send
   - fixed a problem with the bot penalizing the kicker instead of the kickee
     when someone was kicked (Preston, anonymous, Soc @ idlerpg.net forum)
-  - the TTL at levels >60 was setting the TTL at level 63 + 1 day for each level
-    after 60 instead of TTL at level 60 + 1 day for each level after 60
 
 
 --------------------------------------------------------------------------------
-  v3.0.1
+  v3.0.1: released 5/29/04
 --------------------------------------------------------------------------------
   - forgot to add some sort of mechanism for setting up admins for new bots.
     whoops. bot will now prompt for an owner's account details if it cannot find
@@ -31,7 +88,7 @@ comments, or post them in the forum on the website for public view.
     fixed
 
 --------------------------------------------------------------------------------
-  v3.0
+  v3.0: released 5/29/04
 --------------------------------------------------------------------------------
   - fixed a bug causing RESTART not to work unless the bot's filename happened
     to be the same as its nickname
@@ -282,7 +339,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.4.1
+  v2.4.1: unreleased
 --------------------------------------------------------------------------------
 
   - PEVAL will now error and refuse to send output > 15 lines. this is to avoid
@@ -290,7 +347,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.4+fixes
+  v2.4+fixes: released 2/20/04
 --------------------------------------------------------------------------------
 
   - items are set to 0 on account creation; they were previous undefined
@@ -299,7 +356,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.4
+  v2.4: released 10/13/03
 --------------------------------------------------------------------------------
 
   - updated privmsg() function to avoid annoying substr()/uninitialized value
@@ -346,7 +403,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.3.1
+  v2.3.1: released 9/20/03
 --------------------------------------------------------------------------------
 
   - fixed bug with item finding; bad logic sometimes resulted in user not
@@ -354,7 +411,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.3
+  v2.3: released 8/29/03
 --------------------------------------------------------------------------------
 
   - Jotun's Fury max level dropped back to 174
@@ -430,7 +487,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.2.2 (schmolli)
+  v2.2.2 (schmolli): released 7/18/03
 --------------------------------------------------------------------------------
 
   * The changes in this version are based almost completely on a patch sent to
@@ -448,7 +505,7 @@ comments, or post them in the forum on the website for public view.
 
 
 --------------------------------------------------------------------------------
-  v2.2.1
+  v2.2.1: released 7/16/03
 --------------------------------------------------------------------------------
 
   - fixed a bug in item finding; if unique item was better than helm, not
